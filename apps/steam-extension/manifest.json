@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Steam Session Helper",
+  "version": "1.0.0",
+  "permissions": ["cookies"],
+  "host_permissions": ["https://steamcommunity.com/*"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

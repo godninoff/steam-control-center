@@ -1,0 +1,12 @@
+{
+  "name": "steam-control-center",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @steam/api dev\" \"pnpm --filter @steam/market dev\"",
+    "build": "pnpm --filter @steam/market build"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

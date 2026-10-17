@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer properties {
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  font-family: Inter, system-ui, sans-serif;
+  background: #07111f;
+  color: #f8fafc;
+}
+
+#root {
+  min-height: 100vh;
+}
