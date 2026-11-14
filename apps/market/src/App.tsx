@@ -17,14 +17,16 @@ import { historyColumns } from "./helpers/table-config";
 
 import type { ScannerSettings } from "./model/scanner-types";
 import { ScannerFilters } from "./components/scanner/ScannerFilters";
+import { MarketTab } from "./components/market/MarketTab";
 
-type Tab = "history" | "sell" | "buy" | "scanner";
+type Tab = "history" | "sell" | "buy" | "scanner" | "market";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "history", label: "История" },
   { id: "sell", label: "Лоты на продажу" },
   { id: "buy", label: "Лоты на покупку" },
   { id: "scanner", label: "Сканер" },
+  { id: "market", label: "Маркет" },
 ];
 
 const formatPrice = (price: number) =>
@@ -249,6 +251,7 @@ const App = () => {
           )}
         </div>
       </div>
+      {activeTab === "market" && <MarketTab />}
 
       {activeTab === "scanner" && (
         <div className="space-y-4">

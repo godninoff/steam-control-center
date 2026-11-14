@@ -11,6 +11,8 @@ import scannerPriceHistoryRouter from "./routes/scanner-price-history";
 import { startScannerHistoryWorker } from "./services/scanner-history-worker";
 import { startScannerCatalogWorker } from "./services/scanner-catalog-worker";
 
+import marketItemsRouter from "./routes/market-items";
+
 dotenv.config();
 
 const app = express();
@@ -33,6 +35,7 @@ app.use("/api", marketRouter);
 app.use("/api", scannerRouter);
 app.use("/api", scannerCatalogRouter);
 app.use("/api", scannerPriceHistoryRouter);
+app.use("/api", marketItemsRouter);
 
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
