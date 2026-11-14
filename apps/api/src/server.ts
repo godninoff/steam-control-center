@@ -17,8 +17,9 @@ dotenv.config();
 
 const app = express();
 
-const PORT = 4000;
-const MARKET_URL = "http://localhost:3000";
+const PORT = Number(process.env.PORT) || 4000;
+
+const MARKET_URL = process.env.MARKET_URL || "http://localhost:3000";
 
 app.use(express.json());
 
@@ -37,7 +38,7 @@ app.use("/api", scannerCatalogRouter);
 app.use("/api", scannerPriceHistoryRouter);
 app.use("/api", marketItemsRouter);
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://localhost:${PORT}`);
 
   const appId = Number(process.env.STEAM_APP_ID);
