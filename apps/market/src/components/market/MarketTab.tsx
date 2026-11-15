@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type MarketItem = {
   marketHashName: string;
@@ -12,34 +12,18 @@ type MarketItem = {
 const API = "http://localhost:4000";
 
 const PAGE_SIZE = 50;
-const DEBOUNCE_MS = 500;
 
 export function MarketTab() {
+  // черновик — то, что сейчас в инпутах
   const [minPrice, setMinPrice] = useState("5000");
   const [maxPrice, setMaxPrice] = useState("10000");
+  // применённый фильтр — то, по чему реально идёт запрос
+  const [applied, setApplied] = useState({ min: "5000", max: "10000" });
+
   const [items, setItems] = useState<MarketItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
-
-  // Состояние, по которому реально делается запрос (с задержкой)
-  const [debouncedMin, setDebouncedMin] = useState("5000");
-  const [debouncedMax, setDebouncedMax] = useState("10000");
-
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Пока печатаем — просто обновляем инпут и сбрасываем таймер
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      setDebouncedMin(minPrice);
-      setDebouncedMax(maxPrice);
-    }, DEBOUNCE_MS);
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [minPrice, maxPrice]);
 
   const load = useCallback(
     async (from: number, append: boolean) => {
@@ -47,8 +31,8 @@ export function MarketTab() {
       try {
         const params = new URLSearchParams({
           appid: "730",
-          minPrice: debouncedMin,
-          maxPrice: debouncedMax,
+          minPrice: applied.min,
+          maxPrice: applied.max,
           limit: String(PAGE_SIZE),
           offset: String(from),
         });
@@ -63,12 +47,16 @@ export function MarketTab() {
         setLoading(false);
       }
     },
-    [debouncedMin, debouncedMax],
+    [applied],
   );
 
   useEffect(() => {
     load(0, false);
   }, [load]);
+
+  function applyFilters() {
+    setApplied({ min: minPrice, max: maxPrice });
+  }
 
   return (
     <div className="p-4">
@@ -77,6 +65,7 @@ export function MarketTab() {
           type="number"
           value={minPrice}
           onChange={(e) => setMinPrice(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && applyFilters()}
           placeholder="Цена от, ₽"
           className="rounded border px-2 py-1"
         />
@@ -84,9 +73,17 @@ export function MarketTab() {
           type="number"
           value={maxPrice}
           onChange={(e) => setMaxPrice(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && applyFilters()}
           placeholder="до, ₽"
           className="rounded border px-2 py-1"
         />
+        <button
+          type="button"
+          onClick={applyFilters}
+          className="rounded border px-3 py-1"
+        >
+          Применить
+        </button>
         {loading && <span>Загрузка…</span>}
       </div>
 

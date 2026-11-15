@@ -12,6 +12,7 @@ import { startScannerHistoryWorker } from "./services/scanner-history-worker";
 import { startScannerCatalogWorker } from "./services/scanner-catalog-worker";
 
 import marketItemsRouter from "./routes/market-items";
+import casesRouter from "./routes/cases";
 
 dotenv.config();
 
@@ -37,6 +38,7 @@ app.use("/api", scannerRouter);
 app.use("/api", scannerCatalogRouter);
 app.use("/api", scannerPriceHistoryRouter);
 app.use("/api", marketItemsRouter);
+app.use("/api", casesRouter);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://localhost:${PORT}`);
