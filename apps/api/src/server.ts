@@ -21,12 +21,18 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
 const MARKET_URL = process.env.MARKET_URL || "http://localhost:3000";
+const CHROME_EXTENSION_ID = process.env.CHROME_EXTENSION_ID || "";
+
+const ALLOWED_ORIGINS = [
+  MARKET_URL,
+  ...(CHROME_EXTENSION_ID ? [`chrome-extension://${CHROME_EXTENSION_ID}`] : []),
+];
 
 app.use(express.json());
 
 app.use(
   cors({
-    origin: [MARKET_URL, "chrome-extension://cmcdpenepjodckkceadflldahnelnnid"],
+    origin: ALLOWED_ORIGINS,
     credentials: true,
   }),
 );

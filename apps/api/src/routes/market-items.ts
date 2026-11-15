@@ -9,7 +9,8 @@ import type { SteamCurrency } from "../services/steam-buy-order";
 
 const router = Router();
 
-const MAX_SALES_ITEMS = 500;
+// размер одного батча запроса продаж
+const SALES_CHUNK = 100;
 
 router.get("/market-items", async (req, res) => {
   try {
@@ -64,17 +65,18 @@ router.get("/market-items", async (req, res) => {
       });
     }
 
-    if (rows.length > MAX_SALES_ITEMS) {
-      rows.sort((a, b) => a.marketPriceRub - b.marketPriceRub);
-      rows.length = MAX_SALES_ITEMS;
+    const total = rows.length;
+
+    // продажи тянем для ВСЕГО диапазона, батчами по 100
+    for (let i = 0; i < rows.length; i += SALES_CHUNK) {
+      const chunk = rows.slice(i, i + SALES_CHUNK);
+      const sales = await getSales7dBatch(chunk.map((r) => r.marketHashName));
+      for (const row of chunk) {
+        row.sales7d = sales.get(row.marketHashName) ?? null;
+      }
     }
 
-    const sales = await getSales7dBatch(rows.map((r) => r.marketHashName));
-
-    for (const row of rows) {
-      row.sales7d = sales.get(row.marketHashName) ?? null;
-    }
-
+    // главная сортировка — по продажам за неделю, при равных — по цене
     rows.sort(
       (a, b) =>
         (b.sales7d ?? 0) - (a.sales7d ?? 0) ||
@@ -84,7 +86,7 @@ router.get("/market-items", async (req, res) => {
     const page = rows.slice(offset, offset + limit);
 
     res.json({
-      total: rows.length,
+      total,
       offset,
       limit,
       items: page,
