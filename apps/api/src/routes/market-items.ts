@@ -9,8 +9,106 @@ import type { SteamCurrency } from "../services/steam-buy-order";
 
 const router = Router();
 
-// размер одного батча запроса продаж
 const SALES_CHUNK = 100;
+
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+// Предмет для расчёта курса: дешёвый, всегда в продаже
+const RATE_ITEM = "Chroma 2 Case";
+
+let rateCache: { value: number; fetchedAt: number } | null = null;
+const RATE_TTL_MS = 60 * 60 * 1000; // час
+
+async function fetchSteamPrice(
+  hashName: string,
+  currency: string,
+): Promise<number | null> {
+  const url = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=${currency}&market_hash_name=${encodeURIComponent(hashName)}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data?.success || !data.lowest_price) return null;
+  const m = String(data.lowest_price)
+    .replace(/\u00A0/g, "")
+    .replace(",", ".")
+    .match(/([\d.]+)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+router.get("/steam-rate", async (_req, res) => {
+  try {
+    if (rateCache && Date.now() - rateCache.fetchedAt < RATE_TTL_MS) {
+      return res.json({ rate: rateCache.value, cached: true });
+    }
+
+    const [rub, uah] = await Promise.all([
+      fetchSteamPrice(RATE_ITEM, "5"),
+      fetchSteamPrice(RATE_ITEM, "18"),
+    ]);
+
+    if (!rub || !uah) {
+      // свежий курс не посчитался — отдаём старый из кэша, если есть
+      if (rateCache) {
+        return res.json({ rate: rateCache.value, cached: true, stale: true });
+      }
+      return res.status(502).json({ error: "Не удалось получить курс Стима" });
+    }
+
+    const rate = rub / uah;
+    rateCache = { value: rate, fetchedAt: Date.now() };
+
+    res.json({ rate, cached: false });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed",
+    });
+  }
+});
+
+// Топ-5 самых дешёвых предложений на продажу в Стиме (автобай), в рублях
+async function getSteamSellOrdersTop(hashName: string): Promise<number[]> {
+  const url = new URL("https://steamcommunity.com/market/orderbook");
+  url.search = new URLSearchParams({
+    q: "Load",
+    qp: JSON.stringify([730, hashName]),
+    cc: "RU",
+    l: "russian",
+    currency: "5",
+  }).toString();
+
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": UA,
+      Accept: "application/json",
+      Referer: `https://steamcommunity.com/market/listings/730/${encodeURIComponent(hashName)}`,
+      "x-valve-request-type": "queryAction",
+    },
+  });
+
+  if (res.status === 429) throw new Error("лимит стима (429)");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const raw = await res.text();
+  if (raw.trimStart().startsWith("<"))
+    throw new Error("пришел HTML вместо JSON");
+
+  const outer = JSON.parse(raw);
+  const payload = "success" in outer ? outer : outer.data;
+  if (!payload?.success)
+    throw new Error("success=false — проверь имя предмета");
+
+  const flat = payload.data?.rgCompactSellOrders;
+  if (!Array.isArray(flat)) return [];
+
+  const prices: number[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) {
+    prices.push(flat[i] / 100);
+  }
+
+  // самые дешёвые первыми, берем топ-5
+  return prices.sort((a, b) => a - b).slice(0, 5);
+}
 
 router.get("/market-items", async (req, res) => {
   try {
@@ -113,6 +211,58 @@ router.get("/steam-buy-order", async (req, res) => {
       buyOrderRub: book.buyOrderRub,
       buyOrders: book.buyOrders,
     });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed",
+    });
+  }
+});
+
+router.get("/steam-sell-orders", async (req, res) => {
+  const name = String(req.query.name ?? "");
+
+  if (!name) return res.status(400).json({ error: "name is required" });
+
+  try {
+    const sellOrders = await getSteamSellOrdersTop(name);
+
+    res.json({
+      marketHashName: name,
+      sellOrders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed",
+    });
+  }
+});
+
+router.post("/market-prices", async (req, res) => {
+  try {
+    const names: string[] = Array.isArray(req.body?.names)
+      ? req.body.names
+          .map((n: unknown) => String(n ?? "").trim())
+          .filter((n: string) => n.length > 0)
+          .slice(0, 500)
+      : [];
+
+    if (names.length === 0) {
+      return res.status(400).json({ error: "names is required" });
+    }
+
+    const prices = await getMarketCsgoPrices();
+
+    const items = names.map((name) => {
+      const market = prices.get(name);
+
+      return {
+        marketHashName: name,
+        marketPriceRub: market?.priceRub ?? null,
+        marketBuyOrderRub: market?.buyOrderRub ?? null,
+      };
+    });
+
+    res.json({ items });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed",

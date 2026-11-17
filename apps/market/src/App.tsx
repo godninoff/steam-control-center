@@ -19,8 +19,17 @@ import type { ScannerSettings } from "./model/scanner-types";
 import { ScannerFilters } from "./components/scanner/ScannerFilters";
 import { MarketTab } from "./components/market/MarketTab";
 import CasesPage from "./components/CasesPage";
+import { BuyOrdersTable } from "./components/BuyOrdersTable";
+import { LotsTable } from "./components/LotsTable";
 
-type Tab = "history" | "sell" | "buy" | "scanner" | "market" | "cases";
+type Tab =
+  | "history"
+  | "sell"
+  | "buy"
+  | "scanner"
+  | "market"
+  | "cases"
+  | "marketCsgo";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "history", label: "История" },
@@ -29,6 +38,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "scanner", label: "Сканер" },
   { id: "market", label: "Маркет" },
   { id: "cases", label: "Кейсы" },
+  { id: "marketCsgo", label: "Маркет CSGO" },
 ];
 
 const formatPrice = (price: number) =>
@@ -254,6 +264,8 @@ const App = () => {
         </div>
       </div>
       {activeTab === "market" && <MarketTab />}
+      {activeTab === "marketCsgo" && <LotsTable />}
+
       {activeTab === "cases" && <CasesPage />}
 
       {activeTab === "scanner" && (
@@ -513,71 +525,7 @@ const App = () => {
         </div>
       )}
 
-      {activeTab === "buy" && (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#0b1524]">
-          <table className="w-full min-w-150 text-left text-sm">
-            <thead className="border-b border-slate-800 bg-slate-900/60 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-5 py-4">Предмет</th>
-                <th className="px-5 py-4">Игра / приложение</th>
-                <th className="px-5 py-4 text-right">Цена за шт.</th>
-                <th className="px-5 py-4 text-right">Количество</th>
-                <th className="px-5 py-4 text-right">Сумма</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {filteredBuyOrders.map((order) => (
-                <tr key={order.id} className="transition hover:bg-slate-800/50">
-                  <td className="px-5 py-4">
-                    <a
-                      href={`https://steamcommunity.com/market/listings/${order.marketAppId}/${encodeURIComponent(order.marketHashName)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-slate-200 transition hover:text-emerald-400"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {order.item}
-                    </a>
-                  </td>
-                  <td className="px-5 py-4">
-                    {order.game && (
-                      <a
-                        href={`https://store.steampowered.com/app/${order.marketAppId}/`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <img
-                          src={order.game}
-                          alt=""
-                          className="h-8 w-auto rounded"
-                        />
-                      </a>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-right text-slate-300">
-                    {formatPrice(order.price)}
-                  </td>
-                  <td className="px-5 py-4 text-right text-slate-300">
-                    {order.quantity}
-                  </td>
-                  <td className="px-5 py-4 text-right font-semibold text-emerald-400">
-                    {formatPrice(order.total)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filteredBuyOrders.length === 0 && (
-            <div className="px-5 py-12 text-center text-sm text-slate-500">
-              {q
-                ? "По этому запросу ничего не найдено"
-                : "Активных заявок на покупку нет"}
-            </div>
-          )}
-        </div>
-      )}
+      {activeTab === "buy" && <BuyOrdersTable orders={filteredBuyOrders} />}
     </section>
   );
 };

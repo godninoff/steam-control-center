@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 type MarketItem = {
   marketHashName: string;
@@ -14,16 +14,15 @@ const API = "http://localhost:4000";
 const PAGE_SIZE = 50;
 
 export function MarketTab() {
-  // черновик — то, что сейчас в инпутах
   const [minPrice, setMinPrice] = useState("5000");
   const [maxPrice, setMaxPrice] = useState("10000");
-  // применённый фильтр — то, по чему реально идёт запрос
   const [applied, setApplied] = useState({ min: "5000", max: "10000" });
 
   const [items, setItems] = useState<MarketItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(
     async (from: number, append: boolean) => {
@@ -43,6 +42,7 @@ export function MarketTab() {
         setItems((prev) => (append ? [...prev, ...data.items] : data.items));
         setTotal(data.total);
         setOffset(from + data.items.length);
+        setLoaded(true);
       } finally {
         setLoading(false);
       }
@@ -50,12 +50,9 @@ export function MarketTab() {
     [applied],
   );
 
-  useEffect(() => {
-    load(0, false);
-  }, [load]);
-
   function applyFilters() {
     setApplied({ min: minPrice, max: maxPrice });
+    load(0, false);
   }
 
   return (
@@ -80,6 +77,7 @@ export function MarketTab() {
         <button
           type="button"
           onClick={applyFilters}
+          disabled={loading}
           className="rounded border px-3 py-1"
         >
           Применить
@@ -93,7 +91,13 @@ export function MarketTab() {
         ))}
       </div>
 
-      {items.length < total && (
+      {!loaded && !loading && (
+        <div className="mt-4 text-sm opacity-60">
+          Задай диапазон цен и нажми «Применить»
+        </div>
+      )}
+
+      {loaded && items.length < total && (
         <button
           disabled={loading}
           onClick={() => load(offset, true)}
@@ -102,9 +106,11 @@ export function MarketTab() {
           Подгрузить ещё {PAGE_SIZE}
         </button>
       )}
-      <div className="mt-2 text-sm opacity-60">
-        Показано {items.length} из {total}
-      </div>
+      {loaded && (
+        <div className="mt-2 text-sm opacity-60">
+          Показано {items.length} из {total}
+        </div>
+      )}
     </div>
   );
 }
@@ -116,6 +122,9 @@ function MarketCard({ item }: { item: MarketItem }) {
   } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [sellData, setSellData] = useState<number[] | null>(null);
+  const [sellLoading, setSellLoading] = useState(false);
+
   const loadSteamData = () => {
     setLoading(true);
 
@@ -125,6 +134,17 @@ function MarketCard({ item }: { item: MarketItem }) {
       .then((r) => r.json())
       .then((d) => setSteamData(d))
       .finally(() => setLoading(false));
+  };
+
+  const loadSellData = () => {
+    setSellLoading(true);
+
+    fetch(
+      `${API}/api/steam-sell-orders?name=${encodeURIComponent(item.marketHashName)}`,
+    )
+      .then((r) => r.json())
+      .then((d) => setSellData(d.sellOrders ?? []))
+      .finally(() => setSellLoading(false));
   };
 
   const marketImage = `https://cdn.csgo.com/item/${encodeURI(item.marketHashName).replaceAll("%20", "+")}/150.png`;
@@ -223,6 +243,48 @@ function MarketCard({ item }: { item: MarketItem }) {
             </div>
           )}
         </>
+      )}
+
+      {sellData == null ? (
+        <button
+          type="button"
+          onClick={loadSellData}
+          disabled={sellLoading}
+          className="mt-1 rounded border px-2 py-1 text-sm"
+        >
+          {sellLoading ? "Загрузка…" : "Автобай стима"}
+        </button>
+      ) : (
+        sellData.length > 0 && (
+          <div className="mt-1 text-sm">
+            <div className="opacity-60">Автобай (покупка на Стиме):</div>
+            {sellData.map((price, index) => {
+              const diff = item.marketPriceRub - price;
+              const percent =
+                item.marketPriceRub > 0
+                  ? (diff / item.marketPriceRub) * 100
+                  : null;
+
+              return (
+                <div key={index}>
+                  {index + 1}.{" "}
+                  <span
+                    className="font-semibold"
+                    style={{ color: diff > 0 ? "#22c550" : "#ef4444" }}
+                  >
+                    {price.toLocaleString("ru-RU")} ₽
+                  </span>
+                  {percent != null && (
+                    <span className="ml-1 text-sm font-normal opacity-60">
+                      ({diff > 0 ? "+" : ""}
+                      {percent.toFixed(2)}%)
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
 
       <div className="mt-2 flex gap-3 text-sm">
