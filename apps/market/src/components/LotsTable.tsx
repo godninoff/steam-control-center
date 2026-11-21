@@ -1,4 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import { useLots, type Lot } from "../hooks/useLots";
+import { getMarketHistory } from "../model/repository";
+import type { MarketHistoryItem } from "../model/types";
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("ru-RU", {
@@ -57,8 +60,125 @@ const PriceCell = ({
   );
 };
 
+const pct = (a: number, b: number) => ((a / b - 1) * 100).toFixed(1);
+
+const PurchaseCell = ({
+  prices,
+  mine,
+  market,
+}: {
+  prices: number[] | undefined;
+  mine: number;
+  market: number | null;
+}) => {
+  if (!prices?.length) {
+    return <span className="text-slate-600">—</span>;
+  }
+  const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
+  return (
+    <span className="flex flex-col items-end">
+      {prices.map((p, i) => (
+        <span key={i} className="whitespace-nowrap tabular-nums text-slate-400">
+          {formatPrice(p)} ₽
+          <span
+            className={`ml-2 text-xs font-semibold ${
+              mine >= p ? "text-emerald-400" : "text-rose-400"
+            }`}
+          >
+            {mine >= p ? "+" : ""}
+            {pct(mine, p)}%
+          </span>
+          {market != null && (
+            <span
+              className={`ml-1.5 text-xs ${
+                market >= p ? "text-emerald-400" : "text-rose-400"
+              }`}
+            >
+              {market >= p ? "+" : ""}
+              {pct(market, p)}%
+            </span>
+          )}
+        </span>
+      ))}
+      <span className="mt-0.5 whitespace-nowrap text-xs font-semibold tabular-nums text-slate-300">
+        ср. {formatPrice(avg)} ₽
+        <span
+          className={`ml-2 ${mine >= avg ? "text-emerald-400" : "text-rose-400"}`}
+        >
+          {mine >= avg ? "+" : ""}
+          {pct(mine, avg)}%
+        </span>
+        {market != null && (
+          <span
+            className={`ml-1.5 ${market >= avg ? "text-emerald-400" : "text-rose-400"}`}
+          >
+            {market >= avg ? "+" : ""}
+            {pct(market, avg)}%
+          </span>
+        )}
+      </span>
+    </span>
+  );
+};
+
 export function LotsTable() {
   const { lots, error, reload } = useLots(30000);
+  const [history, setHistory] = useState<MarketHistoryItem[]>([]);
+  const [rate, setRate] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const steamId = localStorage.getItem("steamId");
+    if (!steamId) return;
+    getMarketHistory(steamId)
+      .then(({ items }) => setHistory(items))
+      .catch(() => setHistory([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("https://www.cbr-xml-daily.ru/daily_json.js")
+      .then((r) => r.json())
+      .then((data) => {
+        const uah = data.Valute?.UAH;
+        if (uah && typeof uah.Value === "number" && uah.Nominal) {
+          setRate(uah.Value / uah.Nominal); // <-- делим на номинал
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const dateTs = (d: string): number => {
+    const m = d.match(/(\d{2})\.(\d{2})\.(\d{4}), (\d{2}):(\d{2}):(\d{2})/);
+    return m
+      ? new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime()
+      : 0;
+  };
+
+  const toRub = (item: MarketHistoryItem): number | null => {
+    if (typeof item.received === "number" && rate !== undefined) {
+      return item.received * rate;
+    }
+    return null;
+  };
+
+  const purchaseStats = useMemo(() => {
+    const byName = new Map<string, MarketHistoryItem[]>();
+    for (const item of history) {
+      if (item.type !== "buy" || !item.marketHashName) continue;
+      const arr = byName.get(item.marketHashName) ?? [];
+      arr.push(item);
+      byName.set(item.marketHashName, arr);
+    }
+    const map = new Map<string, number[]>();
+    for (const [name, items] of byName) {
+      const prices = items
+        .sort((a, b) => dateTs(b.date) - dateTs(a.date))
+        .slice(0, 3)
+        .map(toRub)
+        .filter((p): p is number => p !== null); // <-- вот это
+      map.set(name, prices);
+    }
+    return map;
+  }, [history, rate]);
 
   const totalValue = lots.reduce((sum, lot) => sum + lot.price, 0);
   const cheapest = lots.filter((l) => l.position === 1).length;
@@ -121,7 +241,7 @@ export function LotsTable() {
             <h3 className="font-semibold text-white">Лоты market.csgo.com</h3>
             <p className="mt-1 text-sm text-slate-400">
               {lots.length
-                ? "Зелёная цена рынка — ваш лот самый дешёвый"
+                ? "Зелёная маржа — продаёте дороже покупки в Steam"
                 : "Лотов на продаже нет"}
             </p>
           </div>
@@ -142,16 +262,29 @@ export function LotsTable() {
             </p>
           </div>
         ) : (
-          <table className="w-full min-w-160 text-left text-sm">
+          <table className="w-full min-w-180 text-left text-sm">
             <thead className="border-b border-slate-800 bg-slate-900/60 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-5 py-4">Предмет</th>
-                <th className="px-5 py-4 text-right">Моя цена</th>
-                <th className="px-5 py-4 text-right">Цена рынка</th>
+                <th className="px-5 py-4 text-right">Моя цена на маркете КС</th>
+                <th className="px-5 py-4 text-right">
+                  <div>Мин. цена маркета КС</div>
+                  <div className="mt-1 normal-case text-[13px] font-normal text-slate-600">
+                    в скобках: маржа моей цены к мин. цене
+                  </div>
+                </th>
+                <th className="px-5 py-4 text-right">
+                  <div>Покупка (Steam)</div>
+                  <div className="mt-1 normal-case text-[13px] font-normal text-slate-600">
+                    первая цифра: моя цена к покупке · вторая: мин. цена к
+                    покупке
+                  </div>
+                </th>
                 <th className="px-5 py-4 text-center">Позиция</th>
                 <th className="px-5 py-4"></th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-800/80">
               {lots.map((lot) => (
                 <tr key={lot.id} className="transition hover:bg-slate-800/40">
@@ -186,6 +319,13 @@ export function LotsTable() {
                   </td>
                   <td className="px-5 py-4 text-right">
                     <PriceCell
+                      mine={lot.price}
+                      market={lot.market_price ?? null}
+                    />
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <PurchaseCell
+                      prices={purchaseStats.get(lot.name)}
                       mine={lot.price}
                       market={lot.market_price ?? null}
                     />

@@ -12,6 +12,11 @@ export type MarketHistoryItem = {
   price: number;
   fee: number;
   received: number;
+  paidAmount?: number;
+  paidFee?: number;
+  currencyId?: string;
+  receivedAmount?: number;
+  receivedCurrencyId?: string;
   imageUrl?: string;
   appId: string;
   marketHashName: string;

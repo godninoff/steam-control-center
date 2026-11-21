@@ -140,43 +140,40 @@ router.get("/lots", async (_req, res) => {
 
     const positionsByName = new Map<string, Map<number, number>>();
 
+    type Offer = { id: number; price: number };
+
+    const offersByName = new Map<string, Offer[]>();
+
     await Promise.all(
       uniqueNames.map(async (name) => {
         try {
-          const url = `${BASE}/SearchItemByName/${encodeURIComponent(name)}/?key=${KEY}`;
+          const url = `https://market.csgo.com/api/v2/search-item-by-hash-name?key=${KEY}&hash_name=${encodeURIComponent(name)}`;
           const data: any = await cachedGet(url, TTL.search);
-
-          // Реальный формат: { success, list: [{ price (копейки), offers, ... }] }
-          const rows: any[] = Array.isArray(data?.list)
-            ? data.list
-            : Array.isArray(data?.offers)
-              ? data.offers
-              : [];
-
-          // Группируем по цене: несколько записей могут делить одну цену
-          const groups = new Map<number, number>();
-          for (const o of rows) {
-            const price = Number(o.price);
-            const count = Number(o.offers ?? o.count ?? 0);
-            if (price > 0 && count > 0) {
-              groups.set(price, (groups.get(price) ?? 0) + count);
-            }
-          }
-
-          const byPrice = new Map<number, number>();
-          let cheaper = 0;
-          for (const [price, count] of [...groups.entries()].sort(
-            (a, b) => a[0] - b[0],
-          )) {
-            byPrice.set(price, cheaper + 1);
-            cheaper += count;
-          }
-          positionsByName.set(name, byPrice);
+          const rows: any[] = Array.isArray(data?.data) ? data.data : [];
+          const offers: Offer[] = rows
+            .map((o) => ({ id: Number(o.id ?? 0), price: Number(o.price) }))
+            .filter((o) => o.price > 0);
+          if (offers.length) offersByName.set(name, offers);
         } catch {
-          // не получили раскладку — позиция останется 0 («оффлайн»)
+          // позиция останется 0
         }
       }),
     );
+
+    const positionFor = (
+      offers: Offer[] | undefined,
+      myPriceKop: number,
+      myId: number,
+    ) => {
+      if (!offers) return 0;
+      let cheaper = 0;
+      let same = 0;
+      for (const o of offers) {
+        if (o.price < myPriceKop) cheaper++;
+        else if (o.price === myPriceKop && o.id < myId) same++;
+      }
+      return cheaper + same + 1;
+    };
 
     const lots = offers
       .filter((i: any) => Number(i.ui_status) === 1)
@@ -200,8 +197,11 @@ router.get("/lots", async (_req, res) => {
             100,
         );
 
-        // Ищем позицию по market_hash_name, а не по кириллическому названию
-        const position = positionsByName.get(name)?.get(myPriceKop) ?? 0;
+        const position = positionFor(
+          offersByName.get(name),
+          myPriceKop,
+          Number(i.ui_id),
+        );
 
         return {
           id: i.ui_id,
