@@ -124,7 +124,9 @@ const PurchaseCell = ({
 export function LotsTable() {
   const { lots, error, reload } = useLots(30000);
   const [history, setHistory] = useState<MarketHistoryItem[]>([]);
-  const [rate, setRate] = useState<number | undefined>(undefined);
+  const [rate, setRate] = useState(1);
+
+  const IS_UAH = import.meta.env.VITE_UAH === "1";
 
   useEffect(() => {
     const steamId = localStorage.getItem("steamId");
@@ -135,12 +137,13 @@ export function LotsTable() {
   }, []);
 
   useEffect(() => {
+    if (!IS_UAH) return;
     fetch("https://www.cbr-xml-daily.ru/daily_json.js")
       .then((r) => r.json())
       .then((data) => {
         const uah = data.Valute?.UAH;
-        if (uah && typeof uah.Value === "number" && uah.Nominal) {
-          setRate(uah.Value / uah.Nominal); // <-- делим на номинал
+        if (uah?.Value && uah.Nominal) {
+          setRate(uah.Value / uah.Nominal);
         }
       })
       .catch(() => {});
@@ -153,12 +156,8 @@ export function LotsTable() {
       : 0;
   };
 
-  const toRub = (item: MarketHistoryItem): number | null => {
-    if (typeof item.received === "number" && rate !== undefined) {
-      return item.received * rate;
-    }
-    return null;
-  };
+  const toRub = (item: MarketHistoryItem): number | null =>
+    typeof item.received === "number" ? item.received * rate : null;
 
   const purchaseStats = useMemo(() => {
     const byName = new Map<string, MarketHistoryItem[]>();
